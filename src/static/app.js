@@ -12,6 +12,69 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => messageDiv.classList.add('hidden'), 4000);
   }
 
+  function createParticipantLi(activityName, email) {
+    const li = document.createElement('li');
+    li.className = 'participant-item';
+
+    const span = document.createElement('span');
+    span.className = 'participant-email-text';
+    span.textContent = email;
+    li.appendChild(span);
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'delete-participant';
+    delBtn.type = 'button';
+    delBtn.setAttribute('aria-label', `Remove ${email}`);
+    delBtn.title = 'Remove participant';
+    delBtn.textContent = '✖';
+
+    delBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!confirm(`Remove ${email} from ${activityName}?`)) return;
+      try {
+        const res = await fetch(`/activities/${encodeURIComponent(activityName)}/participants?email=${encodeURIComponent(email)}`, { method: 'DELETE' });
+        const payload = await res.json();
+        if (!res.ok) {
+          showMessage(payload.detail || 'Failed to remove participant', 'error');
+          return;
+        }
+        // remove from DOM
+        li.remove();
+
+        // If list empty, show placeholder
+        const card = Array.from(document.querySelectorAll('.activity-card'))
+          .find(c => c.querySelector('h4').textContent === activityName);
+        if (card) {
+          const ul = card.querySelector('.participants-list');
+          if (ul && ul.children.length === 0) {
+            const empty = document.createElement('li');
+            empty.className = 'no-participants';
+            empty.textContent = 'No participants yet';
+            ul.appendChild(empty);
+          }
+
+          // Update heading and capacity
+          const heading = card.querySelector('.participants-section h5');
+          const match = heading.textContent.match(/\((\d+)\)/);
+          const newCount = match ? Math.max(0, parseInt(match[1], 10) - 1) : (ul.children.length);
+          heading.textContent = `Participants (${newCount})`;
+          const cap = card.querySelector('p:nth-of-type(3)');
+          if (cap) {
+            const maxMatch = cap.textContent.match(/\/\s*(\d+)/);
+            if (maxMatch) cap.textContent = `Capacity: ${newCount} / ${maxMatch[1]}`;
+          }
+        }
+
+        showMessage(payload.message || 'Removed participant', 'success');
+      } catch (err) {
+        showMessage('Network error while removing participant', 'error');
+      }
+    });
+
+    li.appendChild(delBtn);
+    return li;
+  }
+
   async function loadActivities() {
     activitiesList.innerHTML = '<p>Loading activities...</p>';
     activitySelect.innerHTML = '<option value="">-- Select an activity --</option>';
@@ -59,10 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
           ul.appendChild(li);
         } else {
           info.participants.forEach(email => {
-            const li = document.createElement('li');
-            li.className = 'participant-email';
-            li.textContent = email;
-            ul.appendChild(li);
+            ul.appendChild(createParticipantLi(name, email));
           });
         }
 
@@ -109,10 +169,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const ul = card.querySelector('.participants-list');
         const no = ul.querySelector('.no-participants');
         if (no) no.remove();
-        const li = document.createElement('li');
-        li.className = 'participant-email';
-        li.textContent = email;
-        ul.appendChild(li);
+        ul.appendChild(createParticipantLi(selected, email));
         // Update heading and capacity
         const heading = card.querySelector('.participants-section h5');
         const match = heading.textContent.match(/\((\d+)\)/);
